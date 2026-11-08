@@ -1,0 +1,33 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+regcraft
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+
+# Cache directory (runtime data)
+cache/
+data/
+
+# Node & Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Embedded UI generated assets
+internal/ui/dist/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
