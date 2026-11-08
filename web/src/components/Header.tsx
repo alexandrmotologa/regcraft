@@ -44,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ status, onRefresh, onOpenGC }) =
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs font-mono">
             <Cpu className="h-3.5 w-3.5 text-sky-400" />
             <span>{ramMB} MB RAM</span>
-            <span className="text-[10px] text-slate-500">(&lt; 30MB)</span>
+            <span className="text-[10px] text-slate-500 hidden sm:inline">(&lt; 30MB)</span>
           </div>
 
           {/* Uptime pill */}

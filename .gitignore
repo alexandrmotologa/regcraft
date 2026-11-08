@@ -14,6 +14,7 @@ coverage.html
 
 # Cache directory (runtime data)
 cache/
+testcache/
 data/
 
 # Node & Frontend
