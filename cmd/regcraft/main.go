@@ -35,8 +35,14 @@ layers in content-addressed local storage with SHA-256 deduplication and low mem
 	}
 
 	rootCmd.AddCommand(newServeCmd())
+	rootCmd.AddCommand(newWarmCmd())
 	rootCmd.AddCommand(newPruneCmd())
 	rootCmd.AddCommand(newStatsCmd())
+	rootCmd.AddCommand(newPinCmd())
+	rootCmd.AddCommand(newUnpinCmd())
+	rootCmd.AddCommand(newExportCmd())
+	rootCmd.AddCommand(newImportCmd())
+	rootCmd.AddCommand(newSetupCmd())
 	rootCmd.AddCommand(newVersionCmd())
 
 	if err := rootCmd.Execute(); err != nil {
@@ -81,9 +87,10 @@ func newServeCmd() *cobra.Command {
 
 			metrics := telemetry.Default()
 			upstreamClient := upstream.NewClient(cfg.UpstreamTimeout)
+			warmer := upstream.NewWarmer(cfg, store, upstreamClient, metrics, 4)
 
 			ociHandler := oci.NewHandler(cfg, store, upstreamClient, metrics)
-			apiHandler := api.NewHandler(cfg, store, metrics, version)
+			apiHandler := api.NewHandler(cfg, store, metrics, warmer, version)
 			uiHandler := ui.Handler()
 
 			// Root mux router
@@ -257,6 +264,57 @@ func newStatsCmd() *cobra.Command {
 	return cmd
 }
 
+func newWarmCmd() *cobra.Command {
+	var dir string
+	var parallel int
+	var upstreamHub string
+
+	cmd := &cobra.Command{
+		Use:   "warm <image1> [image2...]",
+		Short: "Pre-fetch images and all layers into CAS local cache",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dir == "" {
+				home, _ := os.UserHomeDir()
+				dir = filepath.Join(home, ".regcraft", "cache")
+			}
+			cfg := config.DefaultConfig()
+			cfg.CacheDir = dir
+			if upstreamHub != "" {
+				cfg.DefaultUpstream = upstreamHub
+			}
+
+			store, err := storage.NewStore(dir)
+			if err != nil {
+				return err
+			}
+
+			metrics := telemetry.Default()
+			client := upstream.NewClient(cfg.UpstreamTimeout)
+			warmer := upstream.NewWarmer(cfg, store, client, metrics, parallel)
+
+			ctx := context.Background()
+			for _, img := range args {
+				fmt.Printf("Warming image %s...\n", img)
+				res, err := warmer.Warm(ctx, img)
+				if err != nil {
+					fmt.Printf("  x Failed: %v\n", err)
+					continue
+				}
+				fmt.Printf("  ✓ Cached: %d layers downloaded (%s), %d layers skipped in %v\n",
+					res.LayersDownloaded, config.FormatByteSize(res.BytesDownloaded), res.LayersSkipped, res.Duration.Round(time.Millisecond))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&dir, "dir", "", "Cache directory")
+	cmd.Flags().IntVar(&parallel, "concurrency", 4, "Concurrent layer download workers")
+	cmd.Flags().StringVar(&upstreamHub, "upstream-hub", "", "Override default Docker Hub URL")
+
+	return cmd
+}
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
@@ -265,4 +323,64 @@ func newVersionCmd() *cobra.Command {
 			fmt.Printf("regcraft v%s (%s)\n", version, commit)
 		},
 	}
+}
+
+func newPinCmd() *cobra.Command {
+	var dir string
+	cmd := &cobra.Command{
+		Use:   "pin <image:tag>",
+		Short: "Freeze a tag to prevent upstream updates",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dir == "" {
+				home, _ := os.UserHomeDir()
+				dir = filepath.Join(home, ".regcraft", "cache")
+			}
+			parts := strings.Split(args[0], ":")
+			if len(parts) != 2 {
+				return fmt.Errorf("expected format <repo>:<tag> (e.g. library/postgres:16)")
+			}
+			store, err := storage.NewStore(dir)
+			if err != nil {
+				return err
+			}
+			if err := store.SetTagPin(parts[0], parts[1], true); err != nil {
+				return err
+			}
+			fmt.Printf("Pinned %s:%s. Manifest is now frozen.\n", parts[0], parts[1])
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", "", "Cache directory")
+	return cmd
+}
+
+func newUnpinCmd() *cobra.Command {
+	var dir string
+	cmd := &cobra.Command{
+		Use:   "unpin <image:tag>",
+		Short: "Unfreeze a tag to allow upstream updates",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dir == "" {
+				home, _ := os.UserHomeDir()
+				dir = filepath.Join(home, ".regcraft", "cache")
+			}
+			parts := strings.Split(args[0], ":")
+			if len(parts) != 2 {
+				return fmt.Errorf("expected format <repo>:<tag> (e.g. library/postgres:16)")
+			}
+			store, err := storage.NewStore(dir)
+			if err != nil {
+				return err
+			}
+			if err := store.SetTagPin(parts[0], parts[1], false); err != nil {
+				return err
+			}
+			fmt.Printf("Unpinned %s:%s. Upstream update checks re-enabled.\n", parts[0], parts[1])
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", "", "Cache directory")
+	return cmd
 }

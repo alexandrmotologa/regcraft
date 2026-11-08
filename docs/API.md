@@ -78,6 +78,36 @@ GET /api/v1/metrics
 ```
 Returns hit counts, miss counts, bytes served from cache, bytes fetched from upstream, hit ratio percentage, and active download streams.
 
+### Live Server-Sent Events (SSE)
+```http
+GET /api/v1/events
+```
+Streams real-time events for active pulls, cache hits, pre-warming progress, and garbage collection.
+
+### Pre-Warm Image Cache
+```http
+POST /api/v1/warm
+```
+Body:
+```json
+{
+  "image": "library/postgres:16"
+}
+```
+Pre-fetches manifests, config blobs, and layers into local CAS with concurrency control.
+
+### Freeze or Unfreeze Tag
+```http
+POST /api/v1/catalog/<repository>/tags/<tag>/pin
+```
+Body:
+```json
+{
+  "pinned": true
+}
+```
+Locks the manifest to prevent upstream checks from overriding it.
+
 ### Prometheus Metrics
 ```http
 GET /metrics

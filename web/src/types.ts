@@ -43,6 +43,7 @@ export interface TagSummary {
   mediaType: string;
   totalSize: number;
   layerCount: number;
+  pinned: boolean;
   lastAccessed: string;
 }
 
@@ -59,6 +60,16 @@ export interface LayerRef {
   mediaType: string;
 }
 
+export interface ImageConfigInfo {
+  architecture?: string;
+  os?: string;
+  created?: string;
+  env?: string[];
+  cmd?: string[];
+  entrypoint?: string[];
+  history?: string[];
+}
+
 export interface CachedManifest {
   repository: string;
   reference: string;
@@ -67,6 +78,8 @@ export interface CachedManifest {
   size: number;
   layers: LayerRef[];
   configDigest?: string;
+  pinned: boolean;
+  imageConfig?: ImageConfigInfo;
   createdAt: string;
   lastAccessed: string;
 }
@@ -81,4 +94,23 @@ export interface GCReport {
   deletedManifests: number;
   dryRun: boolean;
   timestamp: string;
+}
+
+export interface LiveEvent {
+  type: string;
+  repository?: string;
+  reference?: string;
+  digest?: string;
+  bytes?: number;
+  message: string;
+  timestamp: string;
+}
+
+export interface WarmResult {
+  image: string;
+  layersDownloaded: number;
+  layersSkipped: number;
+  bytesDownloaded: number;
+  duration: number;
+  error?: string;
 }

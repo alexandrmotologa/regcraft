@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Copy, Check, Trash2, Eye, Box, Clock } from 'lucide-react';
+import { Search, Copy, Check, Trash2, Eye, Box, Clock, Lock, Unlock, Flame } from 'lucide-react';
 import { RepoSummary } from '../types';
 import { formatBytes, formatRelativeTime, shortDigest } from '../utils';
 
@@ -7,6 +7,8 @@ interface ImageCatalogProps {
   repos: RepoSummary[];
   onInspect: (repo: string, tag: string) => void;
   onDeleteTag: (repo: string, tag: string) => void;
+  onTogglePin: (repo: string, tag: string, pinned: boolean) => void;
+  onOpenWarm: () => void;
   listenHost?: string;
 }
 
@@ -14,6 +16,8 @@ export const ImageCatalog: React.FC<ImageCatalogProps> = ({
   repos,
   onInspect,
   onDeleteTag,
+  onTogglePin,
+  onOpenWarm,
   listenHost = 'localhost:5000',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,15 +48,25 @@ export const ImageCatalog: React.FC<ImageCatalogProps> = ({
           </span>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Filter images or tags..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
-          />
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={onOpenWarm}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/60 text-xs font-medium transition"
+          >
+            <Flame className="h-3.5 w-3.5" />
+            <span>Warm Image</span>
+          </button>
+
+          <div className="relative flex-1 sm:w-72">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Filter images or tags..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
+            />
+          </div>
         </div>
       </div>
 
@@ -62,7 +76,7 @@ export const ImageCatalog: React.FC<ImageCatalogProps> = ({
           <Box className="h-10 w-10 mx-auto text-slate-600 mb-3" />
           <p className="text-sm font-medium text-slate-400">No cached images found</p>
           <p className="text-xs mt-1 text-slate-500 max-w-sm mx-auto">
-            Pull any image via <code className="text-sky-400 font-mono">docker pull {listenHost}/alpine:latest</code> to populate the local SSD cache.
+            Pull any image via <code className="text-sky-400 font-mono">docker pull {listenHost}/alpine:latest</code> or click "Warm Image" above.
           </p>
         </div>
       ) : (
@@ -93,14 +107,27 @@ export const ImageCatalog: React.FC<ImageCatalogProps> = ({
                   return (
                     <div
                       key={tag.name}
-                      className="bg-slate-950/70 border border-slate-800 rounded-lg p-3 flex flex-col justify-between hover:border-slate-700 transition"
+                      className={`border rounded-lg p-3 flex flex-col justify-between transition ${
+                        tag.pinned
+                          ? 'bg-slate-950 border-amber-800/50 hover:border-amber-700/80'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-bold text-sky-300 font-mono px-2 py-0.5 rounded bg-sky-950/80 border border-sky-800/50">
                               :{tag.name}
                             </span>
+                            {tag.pinned && (
+                              <span
+                                title="Tag frozen: immune to upstream modifications"
+                                className="text-[10px] uppercase font-semibold text-amber-400 bg-amber-950/80 border border-amber-800/60 px-1.5 py-0.5 rounded flex items-center gap-1"
+                              >
+                                <Lock className="h-2.5 w-2.5" />
+                                <span>Frozen</span>
+                              </span>
+                            )}
                             <span className="text-[11px] text-slate-400 font-mono">
                               {formatBytes(tag.totalSize)}
                             </span>
@@ -113,9 +140,21 @@ export const ImageCatalog: React.FC<ImageCatalogProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1">
+                          {/* Toggle Pin Button */}
+                          <button
+                            onClick={() => onTogglePin(repo.repository, tag.name, !tag.pinned)}
+                            title={tag.pinned ? 'Unfreeze Tag (allow upstream updates)' : 'Freeze Tag (lock version)'}
+                            className={`p-1.5 rounded transition ${
+                              tag.pinned
+                                ? 'text-amber-400 hover:bg-amber-950/60'
+                                : 'text-slate-500 hover:text-amber-300 hover:bg-slate-800'
+                            }`}
+                          >
+                            {tag.pinned ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                          </button>
                           <button
                             onClick={() => onInspect(repo.repository, tag.name)}
-                            title="Inspect Layers"
+                            title="Inspect Layers & Dockerfile commands"
                             className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-800 rounded transition"
                           >
                             <Eye className="h-3.5 w-3.5" />

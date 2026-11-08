@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Header } from './components/Header';
 import { BandwidthGauges } from './components/BandwidthGauges';
+import { LiveActivityBar } from './components/LiveActivityBar';
 import { ImageCatalog } from './components/ImageCatalog';
 import { LayerVisualizer } from './components/LayerVisualizer';
 import { PruneConsole } from './components/PruneConsole';
+import { WarmModal } from './components/WarmModal';
 import { UpstreamStatus } from './components/UpstreamStatus';
-import { DaemonStatus, MetricsSnapshot, RepoSummary, UpstreamItem, CachedManifest } from './types';
+import { DaemonStatus, MetricsSnapshot, RepoSummary, UpstreamItem, CachedManifest, LiveEvent } from './types';
 import { Terminal, AlertTriangle } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -15,6 +17,8 @@ export const App: React.FC = () => {
   const [upstreams, setUpstreams] = useState<UpstreamItem[]>([]);
   const [selectedManifest, setSelectedManifest] = useState<CachedManifest | null>(null);
   const [isGCOpen, setIsGCOpen] = useState(false);
+  const [isWarmOpen, setIsWarmOpen] = useState(false);
+  const [lastEvent, setLastEvent] = useState<LiveEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -37,10 +41,37 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // Periodic polling for status & metrics
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 3000);
+    const interval = setInterval(fetchData, 4000);
     return () => clearInterval(interval);
+  }, [fetchData]);
+
+  // Server-Sent Events (SSE) for live activity
+  useEffect(() => {
+    const eventSource = new EventSource('/api/v1/events');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const parsed: LiveEvent = JSON.parse(event.data);
+        setLastEvent(parsed);
+        // Refresh catalog if a pull or warm completed
+        if (parsed.type === 'pull_complete' || parsed.type === 'warm_progress') {
+          fetchData();
+        }
+      } catch (e) {
+        // Heartbeat or malformed comment
+      }
+    };
+
+    eventSource.onerror = () => {
+      // Reconnect automatically handled by browser
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [fetchData]);
 
   const handleInspect = async (repo: string, tag: string) => {
@@ -70,6 +101,21 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleTogglePin = async (repo: string, tag: string, pinned: boolean) => {
+    try {
+      const res = await fetch(`/api/v1/catalog/${repo}/tags/${tag}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned }),
+      });
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to toggle pin state:', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <Header
@@ -94,6 +140,9 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {/* Live SSE Activity Stream */}
+        <LiveActivityBar lastEvent={lastEvent} />
+
         {/* Live Gauges */}
         <BandwidthGauges metrics={metrics} status={status} />
 
@@ -115,6 +164,8 @@ export const App: React.FC = () => {
           repos={repos}
           onInspect={handleInspect}
           onDeleteTag={handleDeleteTag}
+          onTogglePin={handleTogglePin}
+          onOpenWarm={() => setIsWarmOpen(true)}
           listenHost={status?.cacheDir ? 'localhost:5000' : 'localhost:5000'}
         />
 
@@ -126,6 +177,13 @@ export const App: React.FC = () => {
       <LayerVisualizer
         manifest={selectedManifest}
         onClose={() => setSelectedManifest(null)}
+      />
+
+      {/* Pre-Warm Modal */}
+      <WarmModal
+        isOpen={isWarmOpen}
+        onClose={() => setIsWarmOpen(false)}
+        onSuccess={fetchData}
       />
 
       {/* Prune / GC Console Modal */}

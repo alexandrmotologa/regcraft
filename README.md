@@ -71,7 +71,13 @@ Usage:
 
 Available Commands:
   serve       Start the OCI registry caching proxy and web dashboard
+  warm        Pre-fetch images and all layers into CAS local cache
+  pin         Freeze a tag to prevent upstream updates
+  unpin       Unfreeze a tag to allow upstream updates
   prune       Run garbage collection to reclaim disk space
+  export      Export cached images and layers into a portable tar archive
+  import      Import a portable tar archive of cached images and layers into CAS
+  setup       Automate container runtime mirror configuration (docker, containerd)
   stats       Show cache metrics, storage utilization, and hit ratio
   version     Display version information
 
@@ -82,6 +88,39 @@ Flags:
 ### Start Server
 ```bash
 regcraft serve --port 5000 --dir /data/regcraft --quota 50GB
+```
+
+### Pre-Warm Images (Pre-Fetch Layers into Local SSD)
+```bash
+# Pre-warm multiple base images with 4 concurrent workers
+regcraft warm library/postgres:16 node:22-alpine golang:1.24 --concurrency 4
+```
+
+### Tag Freezing (Pin Immutable Manifests)
+```bash
+# Freeze a tag to prevent upstream changes from updating it
+regcraft pin library/postgres:16
+
+# Unfreeze tag to allow upstream update checks
+regcraft unpin library/postgres:16
+```
+
+### Auto-Configure Docker Daemon
+```bash
+# Automatically locate daemon.json, backup, and add regcraft mirror
+regcraft setup docker
+
+# Print containerd mirror configuration
+regcraft setup containerd
+```
+
+### Air-Gapped Export and Import
+```bash
+# Export images and deduplicated layer blobs to portable tar archive
+regcraft export --output images-backup.tar library/postgres:16
+
+# Import into an air-gapped regcraft cache
+regcraft import --input images-backup.tar
 ```
 
 ### Reclaim Storage

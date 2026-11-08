@@ -71,6 +71,7 @@ type ManifestResult struct {
 type Client struct {
 	httpClient *http.Client
 	tokens     *TokenManager
+	creds      *CredentialStore
 }
 
 // NewClient creates an upstream registry client.
@@ -89,11 +90,17 @@ func NewClient(timeout time.Duration) *Client {
 	return &Client{
 		httpClient: hc,
 		tokens:     NewTokenManager(hc),
+		creds:      NewCredentialStore(),
 	}
 }
 
+// Credentials returns the credential store for configuring auth.
+func (c *Client) Credentials() *CredentialStore {
+	return c.creds
+}
+
 // executeWithAuth performs an HTTP request, negotiating bearer auth challenges if required.
-func (c *Client) executeWithAuth(ctx context.Context, method, targetURL, scope string, configure func(req *http.Request)) (*http.Response, error) {
+func (c *Client) executeWithAuth(ctx context.Context, host, method, targetURL, scope string, configure func(req *http.Request)) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, targetURL, nil)
 	if err != nil {
 		return nil, err
@@ -125,7 +132,8 @@ func (c *Client) executeWithAuth(ctx context.Context, method, targetURL, scope s
 			challenge.Scope = scope
 		}
 
-		token, err := c.tokens.GetToken(challenge)
+		username, password, _ := c.creds.GetCredentials(host)
+		token, err := c.tokens.GetToken(challenge, username, password)
 		if err != nil {
 			return nil, fmt.Errorf("token negotiation failed: %w", err)
 		}
@@ -150,7 +158,7 @@ func (c *Client) FetchManifest(ctx context.Context, repo ResolvedRepo, reference
 	targetURL := fmt.Sprintf("%s/v2/%s/manifests/%s", repo.BaseURL, repo.RepoPath, reference)
 	scope := fmt.Sprintf("repository:%s:pull", repo.RepoPath)
 
-	resp, err := c.executeWithAuth(ctx, http.MethodGet, targetURL, scope, func(req *http.Request) {
+	resp, err := c.executeWithAuth(ctx, repo.RegistryHost, http.MethodGet, targetURL, scope, func(req *http.Request) {
 		req.Header.Set("Accept", AcceptedManifestTypes)
 	})
 	if err != nil {
@@ -187,7 +195,7 @@ func (c *Client) CheckManifest(ctx context.Context, repo ResolvedRepo, reference
 	targetURL := fmt.Sprintf("%s/v2/%s/manifests/%s", repo.BaseURL, repo.RepoPath, reference)
 	scope := fmt.Sprintf("repository:%s:pull", repo.RepoPath)
 
-	resp, err := c.executeWithAuth(ctx, http.MethodHead, targetURL, scope, func(req *http.Request) {
+	resp, err := c.executeWithAuth(ctx, repo.RegistryHost, http.MethodHead, targetURL, scope, func(req *http.Request) {
 		req.Header.Set("Accept", AcceptedManifestTypes)
 		if cachedETag != "" {
 			req.Header.Set("If-None-Match", cachedETag)
@@ -219,7 +227,7 @@ func (c *Client) FetchBlob(ctx context.Context, repo ResolvedRepo, digest string
 	targetURL := fmt.Sprintf("%s/v2/%s/blobs/%s", repo.BaseURL, repo.RepoPath, digest)
 	scope := fmt.Sprintf("repository:%s:pull", repo.RepoPath)
 
-	resp, err := c.executeWithAuth(ctx, http.MethodGet, targetURL, scope, nil)
+	resp, err := c.executeWithAuth(ctx, repo.RegistryHost, http.MethodGet, targetURL, scope, nil)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("failed to fetch blob: %w", err)
 	}

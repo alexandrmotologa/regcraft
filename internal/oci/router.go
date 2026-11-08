@@ -150,6 +150,13 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request, repo, r
 		// 2. Requesting by mutable tag: check local cache
 		cached, err := h.store.GetManifest(repo, reference)
 		if err == nil {
+			if cached.Pinned {
+				// Cache HIT: tag is pinned (frozen) by developer!
+				h.metrics.RecordManifestHit()
+				h.writeManifestResponse(w, r, cached)
+				return
+			}
+
 			// Check if upstream has changed
 			ctx, cancel := context.WithTimeout(r.Context(), h.cfg.UpstreamTimeout)
 			defer cancel()
@@ -234,6 +241,13 @@ func (h *Handler) handleBlob(w http.ResponseWriter, r *http.Request, repo, diges
 			defer file.Close()
 
 			h.metrics.RecordHit(size)
+			telemetry.Events().Broadcast(telemetry.LiveEvent{
+				Type:       telemetry.EventCacheHit,
+				Repository: repo,
+				Digest:     digest,
+				Bytes:      size,
+				Message:    fmt.Sprintf("Served %s (%s) from SSD cache", repo, config.FormatByteSize(size)),
+			})
 
 			w.Header().Set("Docker-Content-Digest", digest)
 			w.Header().Set("Content-Type", "application/octet-stream")
@@ -294,5 +308,12 @@ func (h *Handler) handleBlob(w http.ResponseWriter, r *http.Request, repo, diges
 	// Verify SHA-256 and commit atomically
 	if commitErr := blobWriter.Commit(); commitErr == nil {
 		h.metrics.RecordMiss(copied)
+		telemetry.Events().Broadcast(telemetry.LiveEvent{
+			Type:       telemetry.EventPullComplete,
+			Repository: repo,
+			Digest:     digest,
+			Bytes:      copied,
+			Message:    fmt.Sprintf("Cached %s layer %s (%s)", repo, digest[:19], config.FormatByteSize(copied)),
+		})
 	}
 }

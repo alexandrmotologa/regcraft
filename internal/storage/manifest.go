@@ -164,7 +164,47 @@ func (s *Store) GetManifest(repo, reference string) (*CachedManifest, error) {
 	updatedData, _ := json.MarshalIndent(&cm, "", "  ")
 	_ = os.WriteFile(targetFile, updatedData, 0644)
 
+	// Load and attach config & Dockerfile history if config blob exists in CAS
+	if cm.ConfigDigest != "" {
+		if digestHex, err := CanonicalDigest(cm.ConfigDigest); err == nil {
+			configPath := s.blobPath(digestHex)
+			if f, err := os.Open(configPath); err == nil {
+				if cfgInfo, err := ParseImageConfigBlob(f); err == nil {
+					cm.ImageConfig = cfgInfo
+				}
+				_ = f.Close()
+			}
+		}
+	}
+
 	return &cm, nil
+}
+
+// SetTagPin toggles immutability lock on a cached tag.
+func (s *Store) SetTagPin(repo, tag string, pinned bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	safeTag := strings.ReplaceAll(tag, "/", "_")
+	tagFile := filepath.Join(s.manifestsDir, sanitizeRepo(repo), "tags", safeTag+".json")
+
+	data, err := os.ReadFile(tagFile)
+	if err != nil {
+		return fmt.Errorf("tag %s:%s not found in cache: %w", repo, tag, err)
+	}
+
+	var cm CachedManifest
+	if err := json.Unmarshal(data, &cm); err != nil {
+		return fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	cm.Pinned = pinned
+	updated, err := json.MarshalIndent(&cm, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(tagFile, updated, 0644)
 }
 
 // DeleteTag removes a specific tag file for a repository.

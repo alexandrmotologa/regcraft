@@ -30,7 +30,7 @@ func TestAPIEndpoints(t *testing.T) {
 	metrics := telemetry.NewMetrics()
 	metrics.RecordHit(5000)
 
-	apiHandler := NewHandler(cfg, store, metrics, "1.0.0")
+	apiHandler := NewHandler(cfg, store, metrics, nil, "1.0.0")
 
 	// 1. Status test
 	reqStatus := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)

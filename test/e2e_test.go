@@ -93,8 +93,9 @@ func TestEndToEndFullLifecycle(t *testing.T) {
 	metrics := telemetry.NewMetrics()
 	upstreamClient := upstream.NewClient(5 * time.Second)
 
+	warmer := upstream.NewWarmer(cfg, store, upstreamClient, metrics, 2)
 	ociHandler := oci.NewHandler(cfg, store, upstreamClient, metrics)
-	apiHandler := api.NewHandler(cfg, store, metrics, "1.0.0")
+	apiHandler := api.NewHandler(cfg, store, metrics, warmer, "1.0.0")
 	uiHandler := ui.Handler()
 
 	mux := http.NewServeMux()

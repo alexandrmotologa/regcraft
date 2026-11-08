@@ -76,9 +76,9 @@ func NewTokenManager(client *http.Client) *TokenManager {
 	}
 }
 
-// GetToken acquires a bearer token for the given challenge parameters.
-func (tm *TokenManager) GetToken(challenge *AuthChallenge) (string, error) {
-	cacheKey := fmt.Sprintf("%s|%s|%s", challenge.Realm, challenge.Service, challenge.Scope)
+// GetToken acquires a bearer token for the given challenge parameters, with optional basic auth credentials.
+func (tm *TokenManager) GetToken(challenge *AuthChallenge, username, password string) (string, error) {
+	cacheKey := fmt.Sprintf("%s|%s|%s|%s", challenge.Realm, challenge.Service, challenge.Scope, username)
 
 	tm.mu.RLock()
 	if entry, ok := tm.cache[cacheKey]; ok {
@@ -106,6 +106,10 @@ func (tm *TokenManager) GetToken(challenge *AuthChallenge) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create token request: %w", err)
+	}
+
+	if username != "" && password != "" {
+		req.SetBasicAuth(username, password)
 	}
 
 	resp, err := tm.client.Do(req)

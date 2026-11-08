@@ -29,8 +29,10 @@ type CachedManifest struct {
 	Size         int64      `json:"size"`
 	Payload      []byte     `json:"payload"`
 	Layers       []LayerRef `json:"layers"`
-	ConfigDigest string     `json:"configDigest,omitempty"`
-	CreatedAt    time.Time  `json:"createdAt"`
+	ConfigDigest string           `json:"configDigest,omitempty"`
+	Pinned       bool             `json:"pinned"`
+	ImageConfig  *ImageConfigInfo `json:"imageConfig,omitempty"`
+	CreatedAt    time.Time        `json:"createdAt"`
 	LastAccessed time.Time  `json:"lastAccessed"`
 }
 

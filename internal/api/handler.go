@@ -10,6 +10,7 @@ import (
 	"github.com/alexandrmotologa/regcraft/internal/config"
 	"github.com/alexandrmotologa/regcraft/internal/storage"
 	"github.com/alexandrmotologa/regcraft/internal/telemetry"
+	"github.com/alexandrmotologa/regcraft/internal/upstream"
 )
 
 // Handler serves the Management REST API under /api/v1/.
@@ -17,16 +18,18 @@ type Handler struct {
 	cfg       *config.Config
 	store     *storage.Store
 	metrics   *telemetry.Metrics
+	warmer    *upstream.Warmer
 	version   string
 	startTime time.Time
 }
 
 // NewHandler creates a management API router.
-func NewHandler(cfg *config.Config, store *storage.Store, metrics *telemetry.Metrics, version string) *Handler {
+func NewHandler(cfg *config.Config, store *storage.Store, metrics *telemetry.Metrics, warmer *upstream.Warmer, version string) *Handler {
 	return &Handler{
 		cfg:       cfg,
 		store:     store,
 		metrics:   metrics,
+		warmer:    warmer,
 		version:   version,
 		startTime: time.Now(),
 	}
@@ -48,12 +51,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path = strings.TrimPrefix(path, "/")
 
 	switch {
+	case path == "events":
+		telemetry.Events().ServeHTTP(w, r)
 	case path == "status":
 		h.handleStatus(w, r)
 	case path == "metrics":
 		h.handleMetrics(w, r)
 	case path == "upstreams":
 		h.handleUpstreams(w, r)
+	case path == "warm" && r.Method == http.MethodPost:
+		h.handleWarm(w, r)
 	case path == "gc" && r.Method == http.MethodPost:
 		h.handleGC(w, r)
 	case path == "catalog" && r.Method == http.MethodGet:
@@ -136,6 +143,7 @@ type TagSummary struct {
 	MediaType    string    `json:"mediaType"`
 	TotalSize    int64     `json:"totalSize"`
 	LayerCount   int       `json:"layerCount"`
+	Pinned       bool      `json:"pinned"`
 	LastAccessed time.Time `json:"lastAccessed"`
 }
 
@@ -170,6 +178,7 @@ func (h *Handler) handleCatalogList(w http.ResponseWriter, r *http.Request) {
 					MediaType:    cm.MediaType,
 					TotalSize:    size,
 					LayerCount:   len(cm.Layers),
+					Pinned:       cm.Pinned,
 					LastAccessed: cm.LastAccessed,
 				}
 				rs.Tags = append(rs.Tags, ts)
@@ -190,6 +199,25 @@ func (h *Handler) handleCatalogList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleCatalogItem(w http.ResponseWriter, r *http.Request, subPath string) {
+	// Check for /pin endpoint: <repo>/tags/<tag>/pin
+	if strings.HasSuffix(subPath, "/pin") && r.Method == http.MethodPost {
+		clean := strings.TrimSuffix(subPath, "/pin")
+		parts := strings.Split(clean, "/tags/")
+		if len(parts) == 2 {
+			var pinReq struct {
+				Pinned bool `json:"pinned"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&pinReq)
+			if err := h.store.SetTagPin(parts[0], parts[1], pinReq.Pinned); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "pinned": pinReq.Pinned})
+			return
+		}
+	}
+
 	// subPath: <repo>/tags/<tag>
 	parts := strings.Split(subPath, "/tags/")
 	if len(parts) != 2 {
@@ -251,4 +279,30 @@ func (h *Handler) handleGC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(report)
+}
+
+func (h *Handler) handleWarm(w http.ResponseWriter, r *http.Request) {
+	if h.warmer == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "image warmer not configured"})
+		return
+	}
+
+	var req struct {
+		Image string `json:"image"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Image == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "image reference required (e.g. library/postgres:16)"})
+		return
+	}
+
+	res, err := h.warmer.Warm(r.Context(), req.Image)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(res)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(res)
 }
