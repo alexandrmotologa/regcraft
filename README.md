@@ -9,10 +9,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/alexandrmotologa/regcraft/actions"><img src="https://github.com/alexandrmotologa/regcraft/workflows/CI/badge.svg" alt="CI Status" /></a>
-  <a href="https://github.com/alexandrmotologa/regcraft/releases"><img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version" /></a>
-  <a href="https://github.com/alexandrmotologa/regcraft/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" /></a>
-  <a href="https://opencontainers.org/"><img src="https://img.shields.io/badge/oci-v1.1%20compliant-blueviolet.svg" alt="OCI v1.1" /></a>
+  <a href="https://github.com/alexandrmotologa/regcraft/actions/workflows/ci.yml"><img src="https://github.com/alexandrmotologa/regcraft/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/alexandrmotologa/regcraft/releases"><img src="https://img.shields.io/badge/version-v1.0.0-6366f1.svg?style=flat" alt="Version" /></a>
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat&logo=go" alt="Go Version" /></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/react-19-61DAFB.svg?style=flat&logo=react" alt="React 19" /></a>
+  <a href="https://opencontainers.org/"><img src="https://img.shields.io/badge/oci-v1.1%20compliant-blueviolet.svg?style=flat" alt="OCI v1.1" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat" alt="License" /></a>
 </p>
 
 <p align="center">

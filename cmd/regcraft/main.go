@@ -27,9 +27,17 @@ var (
 )
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "version" || arg == "--version" || arg == "-v" || arg == "-V" {
+			fmt.Printf("regcraft v%s\n", version)
+			return
+		}
+	}
+
 	rootCmd := &cobra.Command{
-		Use:   "regcraft",
-		Short: "High-speed pull-through OCI registry and container image caching proxy",
+		Use:     "regcraft",
+		Version: version,
+		Short:   "High-speed pull-through OCI registry and container image caching proxy",
 		Long: `regcraft accelerates container pulls for Docker, Podman, and Kubernetes by caching
 layers in content-addressed local storage with SHA-256 deduplication and low memory footprint (< 30MB).`,
 	}
